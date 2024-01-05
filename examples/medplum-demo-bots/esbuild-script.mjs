@@ -7,7 +7,7 @@ import esbuild from 'esbuild';
 import { glob } from 'glob';
 
 // Find all TypeScript files in your source directory
-const entryPoints = glob.sync('./src/**/*.ts').filter((file) => !file.endsWith('test.ts'));
+const entryPoints = glob.sync('./src/**/*.ts', { ignore: ['**/*.test.*', '**/scripts/**'] });
 
 const external = ['form-data', 'node-fetch', 'pdfmake', 'ssh2', 'ssh2-sftp-client', 'dotenv', '@medplum/core'];
 

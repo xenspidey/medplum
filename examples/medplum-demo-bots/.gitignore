@@ -21,3 +21,6 @@ tsconfig.tsbuildinfo
 
 # JetBrains
 .idea/
+
+# Secrets
+src/

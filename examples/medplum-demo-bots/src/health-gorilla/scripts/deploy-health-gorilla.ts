@@ -1,4 +1,4 @@
-import { LambdaClient, UpdateFunctionConfigurationCommand } from '@aws-sdk/client-lambda';
+import { GetFunctionCommand, LambdaClient, UpdateFunctionConfigurationCommand } from '@aws-sdk/client-lambda';
 import {
   ContentType,
   MedplumClient,
@@ -39,7 +39,7 @@ const HEALTH_GORILLA_INTEGRATION_SECRETS: readonly string[] = [
 async function main(): Promise<void> {
   const [, , environment] = process.argv;
 
-  dotenv.config({ path: path.resolve(__dirname, `.env-${environment}`) });
+  dotenv.config({ path: path.resolve(__dirname, `.env.${environment}`) });
 
   if (!environment) {
     throw new Error('Missing environment name');
@@ -58,60 +58,7 @@ async function main(): Promise<void> {
     throw new Error('Project  not found: ' + JSON.stringify(medplum.getActiveLogin()));
   }
 
-  await updateProjectSecrets(medplum, project);
   await deployHealthGorillaBots(medplum, project);
-}
-
-async function updateProjectSecrets(medplum: MedplumClient, project: Project): Promise<void> {
-  const ops: PatchOperation[] = [];
-
-  if (!project.secret) {
-    ops.push({ op: 'add', path: '/secret', value: [] });
-    project.secret = [];
-  }
-
-  const toBeUpdated = new Set(HEALTH_GORILLA_INTEGRATION_SECRETS);
-
-  const secrets = project.secret;
-
-  secrets.forEach((secret, index) => {
-    const secretName = secret.name as string;
-    if (toBeUpdated.has(secretName)) {
-      const secretVal = process.env[secretName];
-      if (!secretVal) {
-        throw new Error(`No value for secret '${secretName}'`);
-      }
-      ops.push({
-        op: 'replace',
-        path: `/secret/${index}`,
-        value: {
-          ...secret,
-          valueString: secretVal,
-        },
-      });
-      toBeUpdated.delete(secretName);
-    }
-  });
-
-  toBeUpdated.forEach((secretName) => {
-    const secretVal = process.env[secretName];
-    if (!secretVal) {
-      throw new Error(`No value for secret '${secretName}'`);
-    }
-    ops.push({
-      op: 'add',
-      path: `/secret/-`,
-      value: {
-        name: secretName,
-        valueString: secretVal,
-      },
-    });
-  });
-
-  console.log('Updating Secrets...');
-  console.log(JSON.stringify(ops, null, 2));
-  await medplum.patchResource('Project', project.id as string, ops);
-  console.log('Success');
 }
 
 interface BotDescription {
@@ -155,6 +102,8 @@ const HEALTH_GORILLA_BOTS: BotDescription[] = [
 ];
 
 async function deployHealthGorillaBots(medplum: MedplumClient, project: Project): Promise<void> {
+  const botIds: Record<string, string> = {};
+
   for (const botDescription of HEALTH_GORILLA_BOTS) {
     let existingBot = await medplum.searchOne('Bot', {
       name: botDescription.name,
@@ -171,12 +120,12 @@ async function deployHealthGorillaBots(medplum: MedplumClient, project: Project)
     }
 
     await updateHealthGorillaBot(medplum, existingBot, botDescription);
-    await updateBotSecrets(existingBot);
+    botIds[existingBot.name as string] = existingBot.id as string;
   }
+
+  await updateBotSecrets(existingBot);
 }
-// - [x] update the bot with the identifier + code
-// - [x] deploy the bot
-// - [x] update the lambda with secrets
+
 async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescription: BotDescription): Promise<void> {
   process.stdout.write(`Updating Bot Metadata [${botDescription.name}](${getReferenceString(bot)})...`);
   bot.identifier = [{ system: BOT_IDENTIFIER_SYSTEM, value: botDescription.identifier }];
@@ -194,59 +143,81 @@ async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescr
   bot = await medplum.updateResource(bot);
   process.stdout.write('Success\n');
 
-  for (let attempt = 0; attempt < 5; attempt++) {
-    process.stdout.write(`Deploying Bot: Attempt ${attempt + 1}...'`);
-    let result: OperationOutcome | undefined;
-    try {
-      result = (await medplum.post(medplum.fhirUrl('Bot', bot.id as string, '$deploy'), {
-        code: executableCode,
-        filename: botDescription.dist,
-      })) as OperationOutcome;
-    } catch (e) {
-      if (isResource(e) && e.resourceType === 'OperationOutcome') {
-        if (!e.issue?.[0].code?.includes('An update is in progress')) {
-          throw new Error(normalizeErrorString(e), { cause: e });
-        }
+  process.stdout.write(`Deploying Bot '${bot.name}'...`);
+  let result: OperationOutcome | undefined;
+  try {
+    result = (await medplum.post(medplum.fhirUrl('Bot', bot.id as string, '$deploy'), {
+      code: executableCode,
+      filename: botDescription.dist,
+    })) as OperationOutcome;
+  } catch (e) {
+    if (isResource(e) && e.resourceType === 'OperationOutcome') {
+      if (!e.issue?.[0].code?.includes('An update is in progress')) {
+        throw new Error(normalizeErrorString(e), { cause: e });
       }
-      throw e;
     }
+    throw e;
+  }
 
-    if (isOk(result)) {
-      process.stdout.write('Success\n');
+  if (isOk(result)) {
+    process.stdout.write('Success\n');
+  }
+}
+
+async function updateBotSecrets(bot: Bot): Promise<void> {
+  const lambdaName = `medplum-bot-lambda-${bot.id}`;
+  console.log(`Updating ${lambdaName} secrets...`);
+  const lambdaClient = new LambdaClient({});
+  if (!bot.id) {
+    throw new Error(`Bot ${bot.name} is missing id`);
+  }
+
+  let sleepInterval = 500;
+  let updatedSuccessfully = false;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const lastUpdateStatus = await lambdaClient
+      .send(
+        new GetFunctionCommand({
+          FunctionName: lambdaName,
+        })
+      )
+      .then((e) => e.Configuration?.LastUpdateStatus);
+    // https://docs.aws.amazon.com/lambda/latest/dg/functions-states.html
+    if (lastUpdateStatus === 'Successful') {
+      updatedSuccessfully = true;
       break;
     }
-
-    await sleep(1000);
+    await sleep(sleepInterval);
+    sleepInterval *= 2;
   }
+
+  if (!updatedSuccessfully) {
+    throw new Error(`Lambda ${lambdaName} has not updated successfully`);
+  }
+
+  try {
+    await lambdaClient.send(
+      new UpdateFunctionConfigurationCommand({
+        FunctionName: lambdaName,
+        Environment: {
+          Variables: Object.fromEntries(
+            HEALTH_GORILLA_INTEGRATION_SECRETS.map((secret) => [secret, process.env[secret] as string])
+          ),
+        },
+        Timeout: 90,
+      })
+    );
+  } catch (e) {
+    console.error(`Failure updating lambda ${lambdaName}: ${(e as Error).message}`);
+  }
+  console.log('Success');
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-
-async function updateBotSecrets(bot: Bot): Promise<void> {
-  console.log('Updating Lambda secrets...');
-  const lambdaClient = new LambdaClient({});
-  if (!bot.id) {
-    throw new Error(`Bot ${bot.name} is missing id`);
-  }
-  const lambdaName = `medplum-bot-lambda-${bot.id}`;
-  const command = new UpdateFunctionConfigurationCommand({
-    FunctionName: lambdaName,
-    Environment: {
-      Variables: Object.fromEntries(
-        HEALTH_GORILLA_INTEGRATION_SECRETS.map((secret) => [secret, process.env[secret] as string])
-      ),
-    },
-  });
-  try {
-    await lambdaClient.send(command);
-  } catch (e) {
-    console.error(`Failure updating lambda ${lambdaName}: ${(e as Error).message}`);
-  }
-  console.log('Success');
 }
 
 main().catch(console.error);

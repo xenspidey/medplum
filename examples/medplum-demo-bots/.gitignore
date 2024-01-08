@@ -23,4 +23,4 @@ tsconfig.tsbuildinfo
 .idea/
 
 # Secrets
-src/
+*.secrets.json

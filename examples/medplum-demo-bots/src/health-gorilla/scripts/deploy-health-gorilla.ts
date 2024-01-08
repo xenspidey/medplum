@@ -1,15 +1,6 @@
 import { GetFunctionCommand, LambdaClient, UpdateFunctionConfigurationCommand } from '@aws-sdk/client-lambda';
-import {
-  ContentType,
-  MedplumClient,
-  PatchOperation,
-  getReferenceString,
-  isOk,
-  isResource,
-  normalizeErrorString,
-} from '@medplum/core';
-import { Bot, OperationOutcome, Project } from '@medplum/fhirtypes';
-import dotenv from 'dotenv';
+import { ContentType, MedplumClient, getReferenceString, isOk, isResource, normalizeErrorString } from '@medplum/core';
+import { Bot, ClientApplication, OperationOutcome, Project } from '@medplum/fhirtypes';
 import fs from 'fs';
 import { homedir } from 'os';
 import path from 'path';
@@ -39,11 +30,14 @@ const HEALTH_GORILLA_INTEGRATION_SECRETS: readonly string[] = [
 async function main(): Promise<void> {
   const [, , environment] = process.argv;
 
-  dotenv.config({ path: path.resolve(__dirname, `.env.${environment}`) });
-
   if (!environment) {
     throw new Error('Missing environment name');
   }
+
+  const secrets = JSON.parse(fs.readFileSync(path.resolve(__dirname, `${environment}.secrets.json`), 'utf8'));
+  ensureSecrets(secrets);
+
+  // Sign in to Medplum
   const profilePath = path.resolve(homedir(), '.medplum', 'health-gorilla.json');
   const profile = JSON.parse(await fs.readFileSync(profilePath, 'utf-8'));
   const medplum = new MedplumClient();
@@ -58,7 +52,37 @@ async function main(): Promise<void> {
     throw new Error('Project  not found: ' + JSON.stringify(medplum.getActiveLogin()));
   }
 
-  await deployHealthGorillaBots(medplum, project);
+  // Set up Health Gorilla Resources
+  await createCallbackClient(medplum, project.id as string, secrets);
+  await deployHealthGorillaBots(medplum, project, secrets);
+  // await uploadOrderingQuestionnaire()
+}
+
+function ensureSecrets(secrets: Record<string, string>): void {
+  const missingSecrets = HEALTH_GORILLA_INTEGRATION_SECRETS.filter((secretName) => !(secretName in secrets));
+  if (missingSecrets.length > 0) {
+    throw new Error(`Missing secrets: ${missingSecrets.join(',')}`);
+  }
+}
+
+const HEALTH_GORILLA_CALLBACK_CLIENT_NAME = 'Health Gorilla Callback Client';
+async function createCallbackClient(
+  medplum: MedplumClient,
+  projectId: string,
+  secrets: Record<string, string>
+): Promise<void> {
+  let existingClient = await medplum.searchOne('ClientApplication', { name: HEALTH_GORILLA_CALLBACK_CLIENT_NAME });
+  if (!existingClient) {
+    process.stdout.write(`Creating new ClientApplication '${HEALTH_GORILLA_CALLBACK_CLIENT_NAME}'...`);
+    existingClient = (await medplum.post(new URL(`admin/projects/${projectId}/client`, medplum.getBaseUrl()), {
+      name: HEALTH_GORILLA_CALLBACK_CLIENT_NAME,
+      description: 'Client for Health Gorilla to send data back to Medplum',
+    })) as ClientApplication;
+    process.stdout.write(`Success - ${getReferenceString(existingClient)}\n`);
+  }
+
+  secrets['HEALTH_GORILLA_CALLBACK_CLIENT_ID'] = existingClient.id as string;
+  secrets['HEALTH_GORILLA_CALLBACK_CLIENT_SECRET'] = existingClient.secret as string;
 }
 
 interface BotDescription {
@@ -101,7 +125,11 @@ const HEALTH_GORILLA_BOTS: BotDescription[] = [
   },
 ];
 
-async function deployHealthGorillaBots(medplum: MedplumClient, project: Project): Promise<void> {
+async function deployHealthGorillaBots(
+  medplum: MedplumClient,
+  project: Project,
+  secrets: Record<string, string>
+): Promise<void> {
   const botIds: Record<string, string> = {};
 
   for (const botDescription of HEALTH_GORILLA_BOTS) {
@@ -123,7 +151,10 @@ async function deployHealthGorillaBots(medplum: MedplumClient, project: Project)
     botIds[existingBot.name as string] = existingBot.id as string;
   }
 
-  await updateBotSecrets(existingBot);
+  console.log(`Set "HEALTH_GORILLA_CALLBACK_BOT_ID" to ${botIds['receive-from-health-gorilla']}`);
+  secrets['HEALTH_GORILLA_CALLBACK_BOT_ID'] = botIds['receive-from-health-gorilla'];
+
+  await Promise.all(Object.values(botIds).map((botId) => updateBotSecrets(botId, secrets)));
 }
 
 async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescription: BotDescription): Promise<void> {
@@ -164,13 +195,10 @@ async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescr
   }
 }
 
-async function updateBotSecrets(bot: Bot): Promise<void> {
-  const lambdaName = `medplum-bot-lambda-${bot.id}`;
+async function updateBotSecrets(botId: string, secrets: Record<string, string>): Promise<void> {
+  const lambdaName = `medplum-bot-lambda-${botId}`;
   console.log(`Updating ${lambdaName} secrets...`);
   const lambdaClient = new LambdaClient({});
-  if (!bot.id) {
-    throw new Error(`Bot ${bot.name} is missing id`);
-  }
 
   let sleepInterval = 500;
   let updatedSuccessfully = false;
@@ -201,9 +229,7 @@ async function updateBotSecrets(bot: Bot): Promise<void> {
       new UpdateFunctionConfigurationCommand({
         FunctionName: lambdaName,
         Environment: {
-          Variables: Object.fromEntries(
-            HEALTH_GORILLA_INTEGRATION_SECRETS.map((secret) => [secret, process.env[secret] as string])
-          ),
+          Variables: secrets,
         },
         Timeout: 90,
       })
@@ -211,7 +237,7 @@ async function updateBotSecrets(bot: Bot): Promise<void> {
   } catch (e) {
     console.error(`Failure updating lambda ${lambdaName}: ${(e as Error).message}`);
   }
-  console.log('Success');
+  console.log(`Successfully updated secrets for ${lambdaName}`);
 }
 
 function sleep(ms: number): Promise<void> {

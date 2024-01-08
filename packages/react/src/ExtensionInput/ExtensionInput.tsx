@@ -1,5 +1,4 @@
-import { JsonInput } from '@mantine/core';
-import { InternalTypeSchema, stringify, tryGetProfile } from '@medplum/core';
+import { InternalTypeSchema, tryGetProfile } from '@medplum/core';
 import { ElementDefinitionType, Extension } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react-hooks';
 import { useEffect, useMemo, useState } from 'react';
@@ -48,16 +47,8 @@ export function ExtensionInput(props: ExtensionInputProps): JSX.Element | null {
     }
   }
 
-  if (!profileUrl) {
-    return <ExtensionJsonInput {...props} />;
-  }
-
   if (loading) {
-    return <div>Loading {profileUrl}...</div>;
-  }
-
-  if (!typeSchema) {
-    return <div>StructureDefinition for {profileUrl} not found</div>;
+    return <div>Loading...</div>;
   }
 
   /*
@@ -79,23 +70,6 @@ export function ExtensionInput(props: ExtensionInputProps): JSX.Element | null {
       typeName={typeSchema?.name ?? 'Extension'}
       defaultValue={props.defaultValue}
       onChange={onChange}
-    />
-  );
-}
-
-function ExtensionJsonInput(props: ExtensionInputProps): JSX.Element {
-  return (
-    <JsonInput
-      id={props.name}
-      name={props.name}
-      data-testid="extension-json-input"
-      defaultValue={stringify(props.defaultValue)}
-      deserialize={JSON.parse}
-      onChange={(newValue) => {
-        if (props.onChange) {
-          props.onChange(JSON.parse(newValue));
-        }
-      }}
     />
   );
 }

@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   // Set up Health Gorilla Resources
   await createCallbackClient(medplum, project.id as string, secrets);
   await deployHealthGorillaBots(medplum, project, secrets);
-  // await uploadOrderingQuestionnaire()
+  await uploadOrderingQuestionnaire(medplum, secrets['HEALTH_GORILLA_CALLBACK_BOT_ID']);
 }
 
 function ensureSecrets(secrets: Record<string, string>): void {
@@ -246,6 +246,29 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+async function uploadOrderingQuestionnaire(medplum: MedplumClient, callbackBotId: string): Promise<void> {
+  const bundle = JSON.parse(
+    fs
+      .readFileSync(path.resolve(__dirname, 'order-questionnaire-bundle.json'), 'utf8')
+      .replaceAll('__HEALTH_GORILLA_CALLBACK_BOT_ID__', `Bot/${callbackBotId}`)
+  );
+
+  process.stdout.write('Uploading ordering Questionnaire and Subscription...');
+  const result = await medplum.executeBatch(bundle);
+  if (result.entry?.every((entry) => entry.response?.status?.startsWith('20'))) {
+    process.stdout.write('Success\n');
+  } else {
+    throw new Error(
+      result.entry
+        ?.filter((entry) => !entry.response?.status?.startsWith('20'))
+        .map((entry) => {
+          return normalizeErrorString(entry.response?.outcome);
+        })
+        .join('\n')
+    );
+  }
 }
 
 main().catch(console.error);

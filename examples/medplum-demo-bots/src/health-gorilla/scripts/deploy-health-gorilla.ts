@@ -132,24 +132,26 @@ async function deployHealthGorillaBots(
 ): Promise<void> {
   const botIds: Record<string, string> = {};
 
-  for (const botDescription of HEALTH_GORILLA_BOTS) {
-    let existingBot = await medplum.searchOne('Bot', {
-      name: botDescription.name,
-    });
-
-    if (!existingBot) {
-      process.stdout.write(`Creating new Bot [${botDescription.name}] ...`);
-      const createBotUrl = new URL('admin/projects/' + (project.id as string) + '/bot', medplum.getBaseUrl());
-      existingBot = (await medplum.post(createBotUrl, {
+  await Promise.all(
+    HEALTH_GORILLA_BOTS.map(async (botDescription) => {
+      let existingBot = await medplum.searchOne('Bot', {
         name: botDescription.name,
-        description: botDescription.description,
-      })) as Bot;
-      process.stdout.write(`Success. ${getReferenceString(existingBot)}\n`);
-    }
+      });
 
-    await updateHealthGorillaBot(medplum, existingBot, botDescription);
-    botIds[existingBot.name as string] = existingBot.id as string;
-  }
+      if (!existingBot) {
+        console.log(`Creating new Bot [${botDescription.name}] ...`);
+        const createBotUrl = new URL('admin/projects/' + (project.id as string) + '/bot', medplum.getBaseUrl());
+        existingBot = (await medplum.post(createBotUrl, {
+          name: botDescription.name,
+          description: botDescription.description,
+        })) as Bot;
+        console.log(`Successfully created ${botDescription.name}: ${getReferenceString(existingBot)}`);
+      }
+
+      await updateHealthGorillaBot(medplum, existingBot, botDescription);
+      botIds[existingBot.name as string] = existingBot.id as string;
+    })
+  );
 
   console.log(`Set "HEALTH_GORILLA_CALLBACK_BOT_ID" to ${botIds['receive-from-health-gorilla']}`);
   secrets['HEALTH_GORILLA_CALLBACK_BOT_ID'] = botIds['receive-from-health-gorilla'];
@@ -158,7 +160,7 @@ async function deployHealthGorillaBots(
 }
 
 async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescription: BotDescription): Promise<void> {
-  process.stdout.write(`Updating Bot Metadata [${botDescription.name}](${getReferenceString(bot)})...`);
+  console.log(`Updating Bot Metadata for [${botDescription.name}(${getReferenceString(bot)})...`);
   bot.identifier = [{ system: BOT_IDENTIFIER_SYSTEM, value: botDescription.identifier }];
   bot.name = botDescription.name;
   bot.description = botDescription.description;
@@ -172,9 +174,9 @@ async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescr
   bot.executableCode = await medplum.createAttachment(executableCode, botDescription.src, ContentType.JAVASCRIPT);
 
   bot = await medplum.updateResource(bot);
-  process.stdout.write('Success\n');
+  console.log(`Successfully updated metadata for ${bot.name}`);
 
-  process.stdout.write(`Deploying Bot '${bot.name}'...`);
+  console.log(`Deploying Bot '${bot.name}'...`);
   let result: OperationOutcome | undefined;
   try {
     result = (await medplum.post(medplum.fhirUrl('Bot', bot.id as string, '$deploy'), {
@@ -191,7 +193,7 @@ async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescr
   }
 
   if (isOk(result)) {
-    process.stdout.write('Success\n');
+    console.log(`Successfully deployed ${bot.name}`);
   }
 }
 

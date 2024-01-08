@@ -35,7 +35,6 @@ async function main(): Promise<void> {
   }
 
   const secrets = JSON.parse(fs.readFileSync(path.resolve(__dirname, `${environment}.secrets.json`), 'utf8'));
-  ensureSecrets(secrets);
 
   // Sign in to Medplum
   const profilePath = path.resolve(homedir(), '.medplum', 'health-gorilla.json');
@@ -156,11 +155,12 @@ async function deployHealthGorillaBots(
   console.log(`Set "HEALTH_GORILLA_CALLBACK_BOT_ID" to ${botIds['receive-from-health-gorilla']}`);
   secrets['HEALTH_GORILLA_CALLBACK_BOT_ID'] = botIds['receive-from-health-gorilla'];
 
+  ensureSecrets(secrets);
   await Promise.all(Object.values(botIds).map((botId) => updateBotSecrets(botId, secrets)));
 }
 
 async function updateHealthGorillaBot(medplum: MedplumClient, bot: Bot, botDescription: BotDescription): Promise<void> {
-  console.log(`Updating Bot Metadata for [${botDescription.name}(${getReferenceString(bot)})...`);
+  console.log(`Updating Bot Metadata for [${botDescription.name}] (${getReferenceString(bot)})...`);
   bot.identifier = [{ system: BOT_IDENTIFIER_SYSTEM, value: botDescription.identifier }];
   bot.name = botDescription.name;
   bot.description = botDescription.description;

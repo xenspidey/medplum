@@ -1710,7 +1710,7 @@
         "criteria": "QuestionnaireResponse?questionnaire=urn:uuid:b17923a8-1d76-4b0a-83a1-33150f2b4947",
         "channel": {
           "type": "rest-hook",
-          "endpoint": "__HEALTH_GORILLA_CALLBACK_BOT_ID__"
+          "endpoint": "__HEALTH_GORILLA_ORDER_BOT_ID__"
         }
       }
     }

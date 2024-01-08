@@ -1,5 +1,13 @@
 import { GetFunctionCommand, LambdaClient, UpdateFunctionConfigurationCommand } from '@aws-sdk/client-lambda';
-import { ContentType, MedplumClient, getReferenceString, isOk, isResource, normalizeErrorString } from '@medplum/core';
+import {
+  ContentType,
+  MedplumClient,
+  getIdentifier,
+  getReferenceString,
+  isOk,
+  isResource,
+  normalizeErrorString,
+} from '@medplum/core';
 import { Bot, ClientApplication, OperationOutcome, Project } from '@medplum/fhirtypes';
 import fs from 'fs';
 import { homedir } from 'os';
@@ -54,7 +62,8 @@ async function main(): Promise<void> {
   // Set up Health Gorilla Resources
   await createCallbackClient(medplum, project.id as string, secrets);
   await deployHealthGorillaBots(medplum, project, secrets);
-  await uploadOrderingQuestionnaire(medplum, secrets['HEALTH_GORILLA_CALLBACK_BOT_ID']);
+  await uploadOrderingQuestionnaire(medplum);
+  await ensureProviderIdentifiers(medplum, secrets['HEALTH_GORILLA_PROVIDER_NPIS']);
 }
 
 function ensureSecrets(secrets: Record<string, string>): void {
@@ -202,6 +211,8 @@ async function updateBotSecrets(botId: string, secrets: Record<string, string>):
   console.log(`Updating ${lambdaName} secrets...`);
   const lambdaClient = new LambdaClient({});
 
+  const { HEALTH_GORILLA_PROVIDER_NPIS: _, ...lambdaSecrets } = secrets;
+
   let sleepInterval = 500;
   let updatedSuccessfully = false;
 
@@ -231,7 +242,7 @@ async function updateBotSecrets(botId: string, secrets: Record<string, string>):
       new UpdateFunctionConfigurationCommand({
         FunctionName: lambdaName,
         Environment: {
-          Variables: secrets,
+          Variables: lambdaSecrets,
         },
         Timeout: 90,
       })
@@ -248,11 +259,15 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-async function uploadOrderingQuestionnaire(medplum: MedplumClient, callbackBotId: string): Promise<void> {
+async function uploadOrderingQuestionnaire(medplum: MedplumClient): Promise<void> {
+  const orderBot = await medplum.searchOne('Bot', { identifier: 'health-gorilla-labs/send-to-health-gorilla' });
+  if (!orderBot?.id) {
+    throw new Error(`Could not find bot 'send-to-health-gorilla'`);
+  }
   const bundle = JSON.parse(
     fs
       .readFileSync(path.resolve(__dirname, 'order-questionnaire-bundle.json'), 'utf8')
-      .replaceAll('__HEALTH_GORILLA_CALLBACK_BOT_ID__', `Bot/${callbackBotId}`)
+      .replaceAll('__HEALTH_GORILLA_ORDER_BOT_ID__', `Bot/${orderBot.id}`)
   );
 
   process.stdout.write('Uploading ordering Questionnaire and Subscription...');
@@ -269,6 +284,22 @@ async function uploadOrderingQuestionnaire(medplum: MedplumClient, callbackBotId
         .join('\n')
     );
   }
+}
+
+async function ensureProviderIdentifiers(medplum: MedplumClient, requiredNpis: string[]): Promise<void> {
+  await Promise.all(
+    requiredNpis.map(async (npi) => {
+      const practitioners = await medplum.searchResources('Practitioner', {
+        identifier: `http://hl7.org/fhir/sid/us-npi|${npi}`,
+      });
+      if (practitioners.length !== 1) {
+        throw new Error(`Found ${practitioners.length} 'Practioners' with NPI ${npi}`);
+      }
+      if (!getIdentifier(practitioners[0], 'https://www.healthgorilla.com')) {
+        throw new Error(`Practitioner ${getReferenceString(practitioners[0])} is missing Health Gorilla ID`);
+      }
+    })
+  );
 }
 
 main().catch(console.error);

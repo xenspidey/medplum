@@ -26,6 +26,15 @@ export function BackboneElementInput(props: BackboneElementInputProps): JSX.Elem
   const profileUrl = props.profileUrl ?? elementsContext.profileUrl;
   const typeSchema = useMemo(() => tryGetDataType(typeName, profileUrl), [typeName, profileUrl]);
   const type = typeSchema?.type ?? typeName ?? '';
+  const setValueWrapper = useCallback(
+    (newValue: any): void => {
+      setValue(newValue);
+      if (onChange) {
+        onChange(newValue);
+      }
+    },
+    [onChange]
+  );
 
   if (!typeSchema) {
     return <div>{type}&nbsp;not implemented</div>;

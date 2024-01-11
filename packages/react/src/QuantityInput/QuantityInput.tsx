@@ -1,4 +1,4 @@
-import { Group, NativeSelect, TextInput } from '@mantine/core';
+import { Group, NativeSelect, SelectItem, TextInput } from '@mantine/core';
 import { Quantity } from '@medplum/fhirtypes';
 import { useState, WheelEvent } from 'react';
 
@@ -11,6 +11,7 @@ export interface QuantityInputProps {
   disableWheel?: boolean;
 }
 
+const COMPARATOR_DATA: (string | SelectItem)[] = [{ value: '', label: '=' }, '<', '<=', '>=', '>'];
 export function QuantityInput(props: QuantityInputProps): JSX.Element {
   const [value, setValue] = useState(props.defaultValue);
 
@@ -27,7 +28,7 @@ export function QuantityInput(props: QuantityInputProps): JSX.Element {
         style={{ width: 80 }}
         data-testid={props.name + '-comparator'}
         defaultValue={value?.comparator}
-        data={['', '<', '<=', '>=', '>']}
+        data={COMPARATOR_DATA}
         onChange={(e) =>
           setValueWrapper({
             ...value,

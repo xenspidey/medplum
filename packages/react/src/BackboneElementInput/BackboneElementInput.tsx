@@ -1,8 +1,8 @@
 import { tryGetDataType } from '@medplum/core';
 import { OperationOutcome } from '@medplum/fhirtypes';
-import { useContext, useMemo, useState } from 'react';
+import { useCallback, useContext, useMemo, useState } from 'react';
 import { ElementsInput } from '../ElementsInput/ElementsInput';
-import { ElementsContext } from '../ElementsInput/ElementsInput.utils';
+import { ElementsContext, buildElementsContext } from '../ElementsInput/ElementsInput.utils';
 
 export interface BackboneElementInputProps {
   /** Type name the backbone element represents */
@@ -20,12 +20,23 @@ export interface BackboneElementInputProps {
 }
 
 export function BackboneElementInput(props: BackboneElementInputProps): JSX.Element {
-  const { typeName } = props;
-  const [value, setValue] = useState<any>(props.defaultValue ?? {});
-  const elementsContext = useContext(ElementsContext);
-  const profileUrl = props.profileUrl ?? elementsContext.profileUrl;
+  const { typeName, onChange } = props;
+  const [value, setValue] = useState<any>(() => props.defaultValue ?? {});
+  const parentElementsContext = useContext(ElementsContext);
+  const profileUrl = props.profileUrl ?? parentElementsContext.profileUrl;
   const typeSchema = useMemo(() => tryGetDataType(typeName, profileUrl), [typeName, profileUrl]);
   const type = typeSchema?.type ?? typeName ?? '';
+
+  const elementsContext = useMemo(() => {
+    return buildElementsContext({
+      parentContext: parentElementsContext,
+      elements: typeSchema?.elements,
+      parentPath: props.path,
+      parentType: type,
+      profileUrl,
+    });
+  }, [parentElementsContext, typeSchema?.elements, props.path, type, profileUrl]);
+
   const setValueWrapper = useCallback(
     (newValue: any): void => {
       setValue(newValue);
@@ -40,22 +51,16 @@ export function BackboneElementInput(props: BackboneElementInputProps): JSX.Elem
     return <div>{type}&nbsp;not implemented</div>;
   }
 
-  function setValueWrapper(newValue: any): void {
-    setValue(newValue);
-    if (props.onChange) {
-      props.onChange(newValue);
-    }
-  }
-
   return (
-    <ElementsInput
-      path={props.path}
-      type={type}
-      elements={typeSchema.elements}
-      defaultValue={value}
-      onChange={setValueWrapper}
-      outcome={props.outcome}
-      typeSchema={typeSchema}
-    />
+    <ElementsContext.Provider value={elementsContext}>
+      <ElementsInput
+        path={props.path}
+        type={type}
+        defaultValue={value}
+        onChange={setValueWrapper}
+        outcome={props.outcome}
+        typeSchema={typeSchema}
+      />
+    </ElementsContext.Provider>
   );
 }

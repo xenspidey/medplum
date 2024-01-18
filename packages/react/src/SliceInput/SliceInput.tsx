@@ -8,7 +8,7 @@ import { ElementDefinitionTypeInput } from '../ResourcePropertyInput/ResourcePro
 import { ArrayAddButton } from '../buttons/ArrayAddButton';
 import { ArrayRemoveButton } from '../buttons/ArrayRemoveButton';
 import { killEvent } from '../utils/dom';
-import classes from './ResourceArrayInput.module.css';
+import classes from '../ResourceArrayInput/ResourceArrayInput.module.css';
 import { SupportedSliceDefinition } from './SliceInput.utils';
 
 export type SliceInputProps = Readonly<{

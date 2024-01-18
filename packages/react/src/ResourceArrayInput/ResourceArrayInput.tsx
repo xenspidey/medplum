@@ -68,7 +68,6 @@ export function ResourceArrayInput(props: Readonly<ResourceArrayInputProps>): JS
       elementsContext: ctx,
     })
       .then(({ slices, slicedValues }) => {
-        console.log(`ResourceArrayInput[${props.path}] assignValues`, defaultValue, { slices, slicedValues });
         setSlices(slices);
         setSlicedValues(slicedValues);
         setLoading(false);

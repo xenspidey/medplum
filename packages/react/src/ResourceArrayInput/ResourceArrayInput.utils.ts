@@ -18,13 +18,9 @@ function isDiscriminatorComponentMatch(
   typedValue: TypedValue,
   discriminator: SliceDiscriminator,
   slice: SupportedSliceDefinition,
-  profileUrl: string | undefined,
-  elements: ElementsContextType['elements']
+  profileUrl: string | undefined
 ): boolean {
   const elementList = slice.typeSchema?.elements ?? slice.elements;
-  if (discriminator.path.includes('.')) {
-    console.log('assignValues dotted', discriminator.path, slice.typeSchema?.elements, slice.elements, elements);
-  }
 
   // const pathParts = discriminator.path.split('.');
   // let lastEd: InternalSchemaElement | undefined;
@@ -61,7 +57,6 @@ function getValueSliceName(
   value: any,
   slices: SupportedSliceDefinition[],
   discriminators: SliceDiscriminator[],
-  elements: ElementsContextType['elements'],
   profileUrl?: string
 ): string | undefined {
   if (!value) {
@@ -75,7 +70,7 @@ function getValueSliceName(
     };
     if (
       discriminators.every((d) =>
-        isDiscriminatorComponentMatch(typedValue, d, slice, slice.typeSchema?.url ?? profileUrl, elements)
+        isDiscriminatorComponentMatch(typedValue, d, slice, slice.typeSchema?.url ?? profileUrl)
       )
     ) {
       return slice.name;
@@ -88,11 +83,9 @@ function assignValuesIntoSlicesImpl(
   values: any[],
   slices: SupportedSliceDefinition[],
   slicing: SlicingRules | undefined,
-  elements: ElementsContextType['elements'],
   profileUrl: string | undefined
 ): any[][] {
   if (!slicing || slicing.slices.length === 0) {
-    console.log('assignValues no slicing or slices');
     return [values];
   }
 
@@ -102,9 +95,8 @@ function assignValuesIntoSlicesImpl(
     slicedValues[i] = [];
   }
 
-  // console.log('assignValues TOP', values, slices, slicing, elements, profileUrl);
   for (const value of values) {
-    const sliceName = getValueSliceName(value, slices, slicing.discriminator, elements, profileUrl);
+    const sliceName = getValueSliceName(value, slices, slicing.discriminator, profileUrl);
     if (!isPopulated(sliceName)) {
       console.warn('slice value assigned to default slice', value, slicing);
     }
@@ -187,7 +179,6 @@ export async function assignValuesIntoSlices({
           defaultValue,
           supportedSlices,
           property.slicing,
-          elementsContext.elements,
           elementsContext.profileUrl
         );
 

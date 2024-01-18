@@ -14,6 +14,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { addProfileToResource, cleanResource, removeProfileFromResource } from './utils';
 
+const PREFERRED_PROFILES = [
+  'http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure',
+  'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+];
+
 export function ProfilesPage(): JSX.Element | null {
   const medplum = useMedplum();
   const { resourceType, id } = useParams() as { resourceType: ResourceType; id: string };
@@ -39,6 +44,13 @@ export function ProfilesPage(): JSX.Element | null {
       .searchResources('StructureDefinition', { type: resourceType, derivation: 'constraint', _count: 50 })
       .then((results) => {
         setAvailableProfiles(results.filter(isSupportedProfileStructureDefinition));
+
+        const preferredSD = results
+          .filter(isSupportedProfileStructureDefinition)
+          .find((sd) => PREFERRED_PROFILES.includes(sd.url));
+        if (preferredSD) {
+          setCurrentProfile(preferredSD);
+        }
       })
       .catch(console.error);
   }, [medplum, resourceType]);
@@ -108,7 +120,9 @@ type ProfileDetailProps = {
 const ProfileDetail: React.FC<ProfileDetailProps> = ({ profile, resource, onResourceUpdated }) => {
   const medplum = useMedplum();
   const [outcome, setOutcome] = useState<OperationOutcome | undefined>();
-  const [active, setActive] = useState(() => resource.meta?.profile?.includes(profile.url));
+  const [active, setActive] = useState(
+    () => resource.meta?.profile?.includes(profile.url) || PREFERRED_PROFILES.includes(profile.url)
+  );
 
   const handleSubmit = useCallback(
     (newResource: Resource): void => {
@@ -128,7 +142,12 @@ const ProfileDetail: React.FC<ProfileDetailProps> = ({ profile, resource, onReso
         })
         .catch((err) => {
           setOutcome(normalizeOperationOutcome(err));
-          showNotification({ color: 'red', message: normalizeErrorString(err) });
+          showNotification({
+            color: 'red',
+            message: normalizeErrorString(err),
+            autoClose: false,
+            styles: { description: { whiteSpace: 'pre-line' } },
+          });
         });
     },
     [medplum, profile.url, onResourceUpdated, active]

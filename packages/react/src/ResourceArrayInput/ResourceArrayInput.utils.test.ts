@@ -1,5 +1,5 @@
 import { HTTP_HL7_ORG, InternalTypeSchema, isProfileLoaded, loadDataType, tryGetProfile } from '@medplum/core';
-import { assignValuesIntoSlices } from './ResourceArrayInput.utils';
+import { assignValuesIntoSlices, prepareSlices } from './ResourceArrayInput.utils';
 import { MockClient, USCoreStructureDefinitionList } from '@medplum/mock';
 import { StructureDefinition } from '@medplum/fhirtypes';
 import { buildElementsContext } from '../ElementsInput/ElementsInput.utils';
@@ -86,14 +86,18 @@ describe('assignValuesIntoSlices', () => {
         profileUrl,
       });
 
-      const { slices, slicedValues } = await assignValuesIntoSlices({
+      const slices = await prepareSlices({
         medplum,
         property,
-        defaultValue: patient.extension,
-        elementsContext,
       });
 
       expect(slices.length).toBe(4);
+      const slicedValues = assignValuesIntoSlices(
+        patient.extension,
+        slices,
+        property.slicing,
+        elementsContext.profileUrl
+      );
       expect(slicedValues.map((sliceValues) => sliceValues.length)).toEqual([1, 1, 1, 1, 0]);
     });
   });
@@ -136,14 +140,18 @@ describe('assignValuesIntoSlices', () => {
         profileUrl,
       });
 
-      const { slices, slicedValues } = await assignValuesIntoSlices({
+      const slices = await prepareSlices({
         medplum,
         property,
-        defaultValue: resource.category,
-        elementsContext,
       });
 
       expect(slices.length).toBe(1);
+      const slicedValues = assignValuesIntoSlices(
+        resource.category,
+        slices,
+        property.slicing,
+        elementsContext.profileUrl
+      );
       expect(slicedValues.map((sliceValues) => sliceValues.length)).toEqual([1, 0]);
     });
 
@@ -198,12 +206,16 @@ describe('assignValuesIntoSlices', () => {
         profileUrl,
       });
 
-      const { slices, slicedValues } = await assignValuesIntoSlices({
+      const slices = await prepareSlices({
         medplum,
         property,
-        defaultValue: resource.component,
-        elementsContext,
       });
+      const slicedValues = assignValuesIntoSlices(
+        resource.component,
+        slices,
+        property.slicing,
+        elementsContext.profileUrl
+      );
 
       expect(slices.length).toBe(2);
       expect(slicedValues.map((sliceValues) => sliceValues.length)).toEqual([1, 1, 0]);

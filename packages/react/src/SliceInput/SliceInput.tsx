@@ -1,14 +1,14 @@
 import { Group, Stack } from '@mantine/core';
 import { InternalSchemaElement, getPropertyDisplayName, isEmpty, isPopulated } from '@medplum/core';
 import { OperationOutcome } from '@medplum/fhirtypes';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ElementsContext, ElementsContextType, buildElementsContext } from '../ElementsInput/ElementsInput.utils';
 import { FormSection } from '../FormSection/FormSection';
+import classes from '../ResourceArrayInput/ResourceArrayInput.module.css';
 import { ElementDefinitionTypeInput } from '../ResourcePropertyInput/ResourcePropertyInput';
 import { ArrayAddButton } from '../buttons/ArrayAddButton';
 import { ArrayRemoveButton } from '../buttons/ArrayRemoveButton';
 import { killEvent } from '../utils/dom';
-import classes from '../ResourceArrayInput/ResourceArrayInput.module.css';
 import { SupportedSliceDefinition } from './SliceInput.utils';
 
 export type SliceInputProps = Readonly<{
@@ -31,25 +31,57 @@ function maybeWrapWithContext(contextValue: ElementsContextType | undefined, con
 
 export function SliceInput(props: SliceInputProps): JSX.Element | null {
   const { slice, property } = props;
+  const defaultValueRef = useRef(props.defaultValue.map((v) => v ?? {}));
   const [values, setValues] = useState<any[]>(() => {
     return props.defaultValue.map((v) => v ?? {});
   });
 
+  useEffect(() => {
+    console.log(
+      `SliceInput[${props.path}]`,
+      isPopulated(slice.typeSchema?.elements),
+      isPopulated(slice.elements),
+      defaultValueRef.current
+    );
+  }, [props.path, slice.elements, slice.typeSchema?.elements]);
+
   const sliceType = slice.typeSchema?.type ?? slice.type[0].code;
+  const sliceElements = slice.typeSchema?.elements ?? slice.elements;
 
   const parentElementsContextValue = useContext(ElementsContext);
 
+  const lastInputsRef = useRef<any[]>([]);
   const contextValue = useMemo(() => {
-    if (isPopulated(slice.elements)) {
+    if (lastInputsRef.current.length === 0) {
+      lastInputsRef.current = [parentElementsContextValue, props.path, sliceElements, sliceType];
+      // console.log('whyChange FIRST', JSON.stringify(lastInputsRef.current));
+    } else {
+      const things = [parentElementsContextValue, props.path, sliceElements, sliceType];
+      const result = [];
+      for (let i = 0; i < things.length; i++) {
+        const thing = things[i];
+        const lastThing = lastInputsRef.current[i];
+        if (!Object.is(thing, lastThing)) {
+          result.push([lastThing, thing]);
+        } else {
+          result.push(' ');
+        }
+      }
+      console.log('whyChange ', result);
+    }
+    if (isPopulated(sliceElements)) {
       return buildElementsContext({
+        defaultValue: defaultValueRef.current,
         parentContext: parentElementsContextValue,
-        elements: slice.elements,
+        elements: sliceElements,
         parentPath: props.path,
         parentType: sliceType,
+        debugMode: true,
       });
     }
+    console.assert(false, 'Expected sliceElements to always be populated', slice.name);
     return undefined;
-  }, [parentElementsContextValue, props.path, slice.elements, sliceType]);
+  }, [parentElementsContextValue, props.path, slice.name, sliceElements, sliceType]);
 
   function setValuesWrapper(newValues: any[]): void {
     setValues(newValues);

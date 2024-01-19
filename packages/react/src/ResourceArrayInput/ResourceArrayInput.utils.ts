@@ -12,7 +12,6 @@ import {
   tryGetProfile,
 } from '@medplum/core';
 import { SupportedSliceDefinition, isSupportedSliceDefinition } from '../SliceInput/SliceInput.utils';
-import { ElementsContextType } from '../ElementsInput/ElementsInput.utils';
 
 function isDiscriminatorComponentMatch(
   typedValue: TypedValue,
@@ -79,7 +78,7 @@ function getValueSliceName(
   return undefined;
 }
 
-function assignValuesIntoSlicesImpl(
+export function assignValuesIntoSlices(
   values: any[],
   slices: SupportedSliceDefinition[],
   slicing: SlicingRules | undefined,
@@ -124,20 +123,16 @@ function assignValuesIntoSlicesImpl(
   return slicedValues;
 }
 
-export async function assignValuesIntoSlices({
+export async function prepareSlices({
   medplum,
   property,
-  defaultValue,
-  elementsContext,
 }: {
   medplum: MedplumClient;
   property: InternalSchemaElement;
-  defaultValue: any[];
-  elementsContext: ElementsContextType;
-}): Promise<{ slices: SupportedSliceDefinition[]; slicedValues: any[][] }> {
+}): Promise<SupportedSliceDefinition[]> {
   return new Promise((resolve, reject) => {
     if (!property.slicing) {
-      resolve({ slices: [], slicedValues: [defaultValue] });
+      resolve([]);
       return;
     }
 
@@ -175,14 +170,7 @@ export async function assignValuesIntoSlices({
             slice.typeSchema = typeSchema;
           }
         }
-        const results = assignValuesIntoSlicesImpl(
-          defaultValue,
-          supportedSlices,
-          property.slicing,
-          elementsContext.profileUrl
-        );
-
-        resolve({ slices: supportedSlices, slicedValues: results });
+        resolve(supportedSlices);
       })
       .catch(reject);
   });

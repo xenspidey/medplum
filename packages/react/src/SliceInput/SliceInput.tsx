@@ -1,7 +1,7 @@
 import { Group, Stack } from '@mantine/core';
 import { InternalSchemaElement, getPropertyDisplayName, isEmpty, isPopulated } from '@medplum/core';
 import { OperationOutcome } from '@medplum/fhirtypes';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import { ElementsContext, ElementsContextType, buildElementsContext } from '../ElementsInput/ElementsInput.utils';
 import { FormSection } from '../FormSection/FormSection';
 import { ElementDefinitionTypeInput } from '../ResourcePropertyInput/ResourcePropertyInput';
@@ -40,7 +40,25 @@ export function SliceInput(props: SliceInputProps): JSX.Element | null {
 
   const parentElementsContextValue = useContext(ElementsContext);
 
+  const lastInputsRef = useRef<any[]>([]);
   const contextValue = useMemo(() => {
+    if (lastInputsRef.current.length === 0) {
+      lastInputsRef.current = [parentElementsContextValue, props.path, sliceElements, sliceType];
+      // console.log('whyChange FIRST', JSON.stringify(lastInputsRef.current));
+    } else {
+      const things = [parentElementsContextValue, props.path, sliceElements, sliceType];
+      const result = [];
+      for (let i = 0; i < things.length; i++) {
+        const thing = things[i];
+        const lastThing = lastInputsRef.current[i];
+        if (!Object.is(thing, lastThing)) {
+          result.push([lastThing, thing]);
+        } else {
+          result.push(' ');
+        }
+      }
+      console.log('whyChange ', result);
+    }
     if (isPopulated(sliceElements)) {
       return buildElementsContext({
         parentContext: parentElementsContextValue,

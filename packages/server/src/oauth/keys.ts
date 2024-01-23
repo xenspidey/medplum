@@ -198,7 +198,7 @@ export function generateAccessToken(
   claims: MedplumAccessTokenClaims,
   additionalClaims?: Record<string, string | number>
 ): Promise<string> {
-  return generateJwt('1h', additionalClaims ? { ...claims, ...additionalClaims } : claims);
+  return generateJwt('2w', additionalClaims ? { ...claims, ...additionalClaims } : claims);
 }
 
 /**

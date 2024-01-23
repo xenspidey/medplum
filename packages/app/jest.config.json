@@ -6,7 +6,9 @@
   },
   "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
   "moduleNameMapper": {
-    "\\.css$": "identity-obj-proxy"
+    "\\.css$": "identity-obj-proxy",
+    "@medplum/core$": "<rootDir>/../core/src/",
+    "@medplum/react$": "<rootDir>/../react/src/"
   },
   "testMatch": ["**/src/**/*.test.ts", "**/src/**/*.test.tsx"],
   "setupFilesAfterEnv": ["./src/test.setup.ts"],

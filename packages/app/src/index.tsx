@@ -4,7 +4,6 @@ import { Notifications } from '@mantine/notifications';
 import '@mantine/notifications/styles.css';
 import { MedplumClient } from '@medplum/core';
 import { MedplumProvider } from '@medplum/react';
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { App } from './App';
@@ -65,14 +64,12 @@ export async function initApp(): Promise<void> {
 
   const root = createRoot(document.getElementById('root') as HTMLElement);
   root.render(
-    <StrictMode>
-      <MedplumProvider medplum={medplum} navigate={navigate}>
-        <MantineProvider theme={theme}>
-          <Notifications position="bottom-right" />
-          <RouterProvider router={router} />
-        </MantineProvider>
-      </MedplumProvider>
-    </StrictMode>
+    <MedplumProvider medplum={medplum} navigate={navigate}>
+      <MantineProvider theme={theme}>
+        <Notifications position="bottom-right" />
+        <RouterProvider router={router} />
+      </MantineProvider>
+    </MedplumProvider>
   );
 }
 

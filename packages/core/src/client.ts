@@ -67,7 +67,7 @@ import {
 import { ReadablePromise } from './readablepromise';
 import { ClientStorage, IClientStorage } from './storage';
 import { indexSearchParameter } from './types';
-import { indexStructureDefinitionBundle, isDataTypeLoaded, isProfileLoaded } from './typeschema/types';
+import { indexStructureDefinitionBundle, isDataTypeLoaded, isProfileLoaded, loadDataType } from './typeschema/types';
 import {
   CodeChallengeMethod,
   ProfileResource,
@@ -1686,6 +1686,29 @@ export class MedplumClient extends EventTarget {
       })()
     );
     this.setCacheEntry(cacheKey, promise);
+    return promise;
+  }
+
+  /**
+   * Requests the schema for a profile as well as any profile extensions.
+   * @category Schema
+   * @param profileUrl - The FHIR URL of the profile
+   * @returns Promise with the schemas of the requested profile and all profile extensions.
+   */
+  requestFullProfileSchema(profileUrl: string): ReadablePromise<string[]> {
+    const promise = new ReadablePromise<string[]>(
+      (async () => {
+        const url = this.fhirUrl('StructureDefinition', '$expandProfile');
+        url.search = new URLSearchParams({ url: profileUrl }).toString();
+        const sds = await new ReadablePromise(
+          this.get<Bundle<StructureDefinition>>(url.toString()).then(bundleToResourceArray)
+        );
+        for (const sd of sds) {
+          loadDataType(sd, sd.url);
+        }
+        return sds.map((sd) => sd.url);
+      })()
+    );
     return promise;
   }
 

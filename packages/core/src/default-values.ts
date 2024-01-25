@@ -193,7 +193,7 @@ class DefaultValueVisitor implements SchemaVisitor {
   onEnterElement(path: string, element: InternalSchemaElement): void {
     const parentPath = this.value.path;
     const parentValues = this.value.values;
-    this.debug('onEnterElement', path, parentValues);
+    this.debug('onEnterElement', path);
 
     const currentValues: TypedValue[] = [];
     for (const parentValue of parentValues) {
@@ -233,7 +233,9 @@ class DefaultValueVisitor implements SchemaVisitor {
         }
         currentValues.push(typedValue);
 
-        this.debug('elementValue', typedValue);
+        if (typedValue.value !== undefined) {
+          this.debug('elementValue', typedValue);
+        }
 
         if (element.fixed || element.pattern) {
           const fixedOrPattern = element.fixed ? 'fixed' : 'pattern';
@@ -297,8 +299,8 @@ class DefaultValueVisitor implements SchemaVisitor {
           slice.typeSchema,
           this.schema.url
         );
-        this.debug('sliceName', sliceName);
         if (sliceName === slice.name) {
+          this.debug('sliceName', sliceName, arrayValue);
           sliceValues.push(arrayValue);
         }
       }

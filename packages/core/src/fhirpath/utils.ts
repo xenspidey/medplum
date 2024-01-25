@@ -68,12 +68,13 @@ export function singleton(collection: TypedValue[], type?: string): TypedValue |
  * @param path - The property path.
  * @param options - (optional) Additional options
  * @param options.profileUrl - (optional) URL of a resource profile for type resolution
+ * @param options.includeEmptyValues - (optional) Whether isEmpty values should be returned.
  * @returns The value of the property and the property type.
  */
 export function getTypedPropertyValue(
   input: TypedValue,
   path: string,
-  options?: { profileUrl?: string }
+  options?: { profileUrl?: string; includeEmptyValues?: boolean }
 ): TypedValue[] | TypedValue | undefined {
   if (!input.value) {
     return undefined;
@@ -81,7 +82,7 @@ export function getTypedPropertyValue(
 
   const elementDefinition = getElementDefinition(input.type, path, options?.profileUrl);
   if (elementDefinition) {
-    return getTypedPropertyValueWithSchema(input.value, path, elementDefinition);
+    return getTypedPropertyValueWithSchema(input.value, path, elementDefinition, options);
   }
 
   return getTypedPropertyValueWithoutSchema(input, path);
@@ -92,12 +93,15 @@ export function getTypedPropertyValue(
  * @param value - The base context (FHIR resource or backbone element).
  * @param path - The property path.
  * @param element - The property element definition.
+ * @param options - (optional) Additional options
+ * @param options.includeEmptyValues - (optional) Whether isEmpty values should be returned.
  * @returns The value of the property and the property type.
  */
 export function getTypedPropertyValueWithSchema(
   value: TypedValue['value'],
   path: string,
-  element: InternalSchemaElement
+  element: InternalSchemaElement,
+  options?: { includeEmptyValues?: boolean }
 ): TypedValue[] | TypedValue | undefined {
   // Consider the following cases of the inputs:
 
@@ -161,7 +165,7 @@ export function getTypedPropertyValueWithSchema(
     }
   }
 
-  if (isEmpty(resultValue)) {
+  if (!options?.includeEmptyValues && isEmpty(resultValue)) {
     return undefined;
   }
 

@@ -205,6 +205,15 @@ describe('SearchParameterDetails', () => {
     expect(details.array).toBe(false);
   });
 
+  test('Goal-start-date', () => {
+    // expression: "(Goal.start as date)"
+    const searchParam = searchParams.find((e) => e.id === 'Goal-start-date') as SearchParameter;
+    const details = getSearchParameterDetails('Goal', searchParam);
+    expect(details).toBeDefined();
+    expect(details.elementDefinitions).toBeDefined();
+    expect(details.elementDefinitions?.length).toBeGreaterThan(0);
+  });
+
   test('Everything', () => {
     // Make sure that getSearchParameterDetails returns successfully for all known parameters.
     for (const resourceType of Object.keys(globalSchema.types)) {

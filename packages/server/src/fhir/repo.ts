@@ -5,12 +5,12 @@ import {
   SearchParameterDetails,
   SearchParameterType,
   SearchRequest,
+  TypedValue,
   allOk,
   badRequest,
   canReadResourceType,
   canWriteResourceType,
   deepEquals,
-  evalFhirPath,
   evalFhirPathTyped,
   forbidden,
   formatSearchQuery,
@@ -30,6 +30,7 @@ import {
   satisfiedAccessPolicy,
   serverError,
   stringify,
+  toTypedValue,
   tooManyRequests,
   validateResource,
   validateResourceType,
@@ -1141,13 +1142,31 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
     }
 
     const details = getSearchParameterDetails(resource.resourceType, searchParam);
-    const values = evalFhirPath(searchParam.expression as string, resource);
+    // const values = evalFhirPath(searchParam.expression as string, resource);
+    const values = evalFhirPathTyped(searchParam.expression as string, [toTypedValue(resource)]);
 
     if (values.length > 0) {
       if (details.array) {
         columns[details.columnName] = values.map((v) => this.buildColumnValue(searchParam, details, v));
       } else {
         columns[details.columnName] = this.buildColumnValue(searchParam, details, values[0]);
+      }
+
+      // if (details.type === SearchP)
+
+      if (details.type === SearchParameterType.DATE || details.type === SearchParameterType.DATETIME) {
+        // // Deprecated - to be replaced with buildPeriodColumn
+        // const period = this.buildPeriodColumn(values[0]);
+        // if (period) {
+        //   columns[details.columnName + '_start'] = period[0];
+        //   columns[details.columnName + '_end'] = period[1];
+        // }
+        const legacyColumnName = `${details.columnName}_${details.type}`;
+        if (details.array) {
+          columns[legacyColumnName] = values.map((v) => this.buildColumnValue(searchParam, details, v));
+        } else {
+          columns[legacyColumnName] = this.buildColumnValue(searchParam, details, values[0]);
+        }
       }
     } else {
       columns[details.columnName] = null;
@@ -1160,19 +1179,23 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
    * If the search parameter is not an array, then this method will be called for the value.
    * @param searchParam - The search parameter definition.
    * @param details - The extra search parameter details.
-   * @param value - The FHIR resource value.
+   * @param typedValue - The FHIR resource value.
    * @returns The column value.
    */
-  private buildColumnValue(searchParam: SearchParameter, details: SearchParameterDetails, value: any): any {
+  private buildColumnValue(searchParam: SearchParameter, details: SearchParameterDetails, typedValue: TypedValue): any {
+    const { value } = typedValue;
+
     if (details.type === SearchParameterType.BOOLEAN) {
       return value === true || value === 'true';
     }
 
     if (details.type === SearchParameterType.DATE) {
+      // Deprecated - to be replaced with buildPeriodColumn
       return this.buildDateColumn(value);
     }
 
     if (details.type === SearchParameterType.DATETIME) {
+      // Deprecated - to be replaced with buildPeriodColumn
       return this.buildDateTimeColumn(value);
     }
 
@@ -1238,6 +1261,36 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
       }
     }
     return undefined;
+  }
+
+  /**
+   * Builds the column value for a date/time parameter.
+   * Tries to parse the date string.
+   * Silently ignores failure.
+   * @param value - The FHIRPath result.
+   * @returns The date/time string if parsed; undefined otherwise.
+   */
+  private buildPeriodColumn(value: TypedValue): [string | undefined, string | undefined] | undefined {
+    let start: string | undefined = undefined;
+    let end: string | undefined = undefined;
+
+    if (typeof value === 'string') {
+      try {
+        const date = new Date(value);
+        start = date.toISOString();
+      } catch (ex) {
+        // Silent ignore
+      }
+    } else if (typeof value === 'object') {
+      // Can be a Period
+      if ('start' in value) {
+        start = this.buildDateTimeColumn(value.start);
+      }
+      if ('end' in value) {
+        end = this.buildDateTimeColumn(value.end);
+      }
+    }
+    return start || end ? [start, end] : undefined;
   }
 
   /**

@@ -1,4 +1,4 @@
-import { ElementDefinitionType, SearchParameter } from '@medplum/fhirtypes';
+import { SearchParameter } from '@medplum/fhirtypes';
 import { Atom } from '../fhirlexer/parse';
 import {
   AsAtom,
@@ -22,9 +22,10 @@ export enum SearchParameterType {
   REFERENCE = 'REFERENCE',
   CANONICAL = 'CANONICAL',
   DATE = 'DATE',
-  DATETIME = 'DATETIME',
-  PERIOD = 'PERIOD',
   UUID = 'UUID',
+
+  /** @deprecated - This will be removed once the migration to "range" columns is complete. */
+  DATETIME = 'DATETIME',
 }
 
 export interface SearchParameterDetails {
@@ -86,7 +87,7 @@ function buildSearchParameterDetails(resourceType: string, searchParam: SearchPa
     if (atomArray.length === 1 && atomArray[0] instanceof BooleanInfixOperatorAtom) {
       builder.propertyTypes.add('boolean');
     } else {
-      crawlSearchParameterDetails(builder, flattenAtom(expression), resourceType, 1);
+      crawlSearchParameterDetails(builder, atomArray, resourceType, 1);
     }
   }
 
@@ -107,12 +108,6 @@ function crawlSearchParameterDetails(
   index: number
 ): void {
   const currAtom = atoms[index];
-
-  if (currAtom instanceof AsAtom) {
-    details.propertyTypes.add(currAtom.right.toString());
-    return;
-  }
-
   if (currAtom instanceof FunctionAtom) {
     handleFunctionAtom(details, currAtom);
     return;
@@ -135,11 +130,21 @@ function crawlSearchParameterDetails(
     details.array = true;
   }
 
+  // By default, explore all element definition types
+  let elementTypes = elementDefinition.type;
+
+  // Peek ahead to see if the next atom is an "as" atom, which specifies the type
+  const nextAtom = atoms[nextIndex];
+  if (nextAtom instanceof AsAtom) {
+    atoms = atoms.slice(0, nextIndex);
+    elementTypes = elementTypes.filter((t) => t.code === nextAtom.right.toString());
+  }
+
   if (nextIndex >= atoms.length) {
     // This is the final atom in the expression
     // So we can collect the ElementDefinition and property types
     details.elementDefinitions.push(elementDefinition);
-    for (const elementDefinitionType of elementDefinition.type as ElementDefinitionType[]) {
+    for (const elementDefinitionType of elementTypes) {
       details.propertyTypes.add(elementDefinitionType.code as string);
     }
     return;
@@ -148,7 +153,7 @@ function crawlSearchParameterDetails(
   // This is in the middle of the expression, so we need to keep crawling.
   // "code" is only missing when using "contentReference"
   // "contentReference" is handled whe parsing StructureDefinition into InternalTypeSchema
-  for (const elementDefinitionType of elementDefinition.type as ElementDefinitionType[]) {
+  for (const elementDefinitionType of elementTypes) {
     let propertyType = elementDefinitionType.code as string;
     if (isBackboneElement(propertyType)) {
       propertyType = elementDefinition.type[0].code;
@@ -198,6 +203,7 @@ function getSearchParameterType(searchParam: SearchParameter, propertyTypes: Set
       if (propertyTypes.size === 1 && propertyTypes.has(PropertyType.date)) {
         return SearchParameterType.DATE;
       } else {
+        // Deprecated - This will be removed once the migration to "range" columns is complete.
         return SearchParameterType.DATETIME;
       }
     case 'number':

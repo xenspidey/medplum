@@ -68,7 +68,12 @@ export async function main(): Promise<void> {
   const targetDefinition = buildTargetDefinition();
   const b = new FileBuilder();
   writeMigrations(b, startDefinition, targetDefinition);
-  writeFileSync(resolve(__dirname, '../../server/src/migrations/schema/v56.ts'), b.toString(), 'utf8');
+  writeFileSync(resolve(__dirname, '../../server/src/migrations/schema/v57.ts'), b.toString(), 'utf8');
+
+  // let codyDateCount = 0;
+  // let codyPeriodCount = 0;
+  console.log('codyDAteCount', codyDateCount);
+  console.log('codyPeriodCount', codyPeriodCount);
 }
 
 async function buildStartDefinition(): Promise<SchemaDefinition> {
@@ -233,6 +238,9 @@ function buildCreateTables(result: SchemaDefinition, resourceType: string, fhirT
   });
 }
 
+let codyDateCount = 0;
+let codyPeriodCount = 0;
+
 function buildSearchColumns(tableDefinition: TableDefinition, resourceType: string): void {
   for (const searchParam of searchParams) {
     if (!searchParam.base?.includes(resourceType as ResourceType)) {
@@ -242,6 +250,37 @@ function buildSearchColumns(tableDefinition: TableDefinition, resourceType: stri
     const details = getSearchParameterDetails(resourceType, searchParam);
     if (isLookupTableParam(searchParam, details)) {
       continue;
+    }
+
+    if (details.type === SearchParameterType.DATE || details.type === SearchParameterType.DATETIME) {
+      codyDateCount++;
+    }
+
+    // if (
+    //   details.type === SearchParameterType.DATE &&
+    //   details.elementDefinitions
+    //   // &&
+    //   // details.elementDefinitions.length > 1
+    // ) {
+    //   console.log(
+    //     'CODY, found DATETIME',
+    //     resourceType,
+    //     details.type,
+    //     details.columnName,
+    //     // details.elementDefinitions.length
+    //     details.elementDefinitions.map((e) => e.type?.map((t) => t.code))
+    //   );
+    // }
+
+    if (details.elementDefinitions?.some((e) => e.type?.some((t) => t.code === 'Period'))) {
+      console.log(
+        'CODY, found period',
+        resourceType,
+        details.type,
+        details.columnName,
+        details.elementDefinitions?.length
+      );
+      codyPeriodCount++;
     }
 
     const columnName = details.columnName;
@@ -327,10 +366,12 @@ function getColumnType(details: SearchParameterDetails): string {
       baseColumnType = 'BOOLEAN';
       break;
     case SearchParameterType.DATE:
-      baseColumnType = 'DATE';
-      break;
     case SearchParameterType.DATETIME:
-      baseColumnType = 'TIMESTAMPTZ';
+      // baseColumnType = 'TIMESTAMPTZ';
+      // if (details.elementDefinitions?.some((e) => e.type?.some((t) => t.code === 'Period'))) {
+      //   console.log('CODY, found period', details.type, details.columnName, details.elementDefinitions?.length);
+      // }
+      baseColumnType = 'TSTZRANGE';
       break;
     case SearchParameterType.NUMBER:
     case SearchParameterType.QUANTITY:
@@ -457,7 +498,12 @@ function migrateColumns(b: FileBuilder, startTable: TableDefinition, targetTable
     if (!startColumn) {
       writeAddColumn(b, targetTable, targetColumn);
     } else if (normalizeColumnType(startColumn) !== normalizeColumnType(targetColumn)) {
-      writeUpdateColumn(b, targetTable, targetColumn);
+      if (targetColumn.type === 'TSTZRANGE') {
+        // Special case for date/datetime to range migration
+        writeAddColumn(b, targetTable, { ...targetColumn, name: targetColumn.name + '_range' });
+      } else {
+        writeUpdateColumn(b, targetTable, targetColumn);
+      }
     }
   }
 }

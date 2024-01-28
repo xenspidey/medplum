@@ -18,6 +18,7 @@ export const locks = {
 
 export async function initDatabase(serverConfig: MedplumServerConfig, runMigrations = true): Promise<void> {
   const config = serverConfig.database as MedplumDatabaseConfig;
+  console.log('CODY initDatabase host', serverConfig.databaseProxyEndpoint ?? config.host);
   pool = new Pool({
     host: serverConfig.databaseProxyEndpoint ?? config.host,
     port: config.port,

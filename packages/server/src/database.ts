@@ -18,15 +18,26 @@ export const locks = {
 
 export async function initDatabase(serverConfig: MedplumServerConfig, runMigrations = true): Promise<void> {
   const config = serverConfig.database as MedplumDatabaseConfig;
-  console.log('CODY initDatabase host', serverConfig.databaseProxyEndpoint ?? config.host);
-  pool = new Pool({
-    host: serverConfig.databaseProxyEndpoint ?? config.host,
+
+  const poolConfig = {
+    host: config.host,
     port: config.port,
     database: config.dbname,
     user: config.username,
     password: config.password,
     ssl: config.ssl,
-  });
+  };
+
+  if (serverConfig.databaseProxyEndpoint) {
+    poolConfig.host = serverConfig.databaseProxyEndpoint;
+    poolConfig.ssl = poolConfig.ssl ?? {};
+    poolConfig.ssl.require = true;
+  }
+
+  console.log('CODY initDatabase host', poolConfig.host);
+  console.log('CODY initDatabase ssl.require', poolConfig.ssl?.require);
+
+  pool = new Pool(poolConfig);
 
   pool.on('error', (err) => {
     globalLogger.error('Database connection error', err);

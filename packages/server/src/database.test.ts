@@ -7,6 +7,7 @@ import { MedplumDatabaseConfig, MedplumDatabaseSslConfig, loadConfig } from './c
 import { closeDatabase, initDatabase } from './database';
 
 jest.mock('pg');
+
 const poolSpy = jest.spyOn(pg, 'Pool').mockImplementation((_config?: PoolConfig) => {
   class MockPoolClient extends Duplex implements PoolClient {
     release(): void {}
@@ -62,9 +63,11 @@ const poolSpy = jest.spyOn(pg, 'Pool').mockImplementation((_config?: PoolConfig)
 });
 
 describe('Database config', () => {
-  afterEach(() => {});
+  beforeEach(() => {
+    poolSpy.mockClear();
+  });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await closeDatabase();
   });
 
@@ -92,6 +95,29 @@ describe('Database config', () => {
       database: databaseConfig.dbname,
       user: databaseConfig.username,
       ssl: sslConfig,
+    });
+  });
+
+  test('RDS proxy', async () => {
+    const config = await loadConfig('file:test.config.json');
+    expect(config).toBeDefined();
+    expect(config.baseUrl).toBeDefined();
+    expect(config.database).toBeDefined();
+
+    const configCopy = deepClone(config);
+    configCopy.databaseProxyEndpoint = 'test';
+
+    const databaseConfig = configCopy.database as MedplumDatabaseConfig;
+
+    await initDatabase(configCopy, false);
+    expect(poolSpy).toHaveBeenCalledTimes(1);
+    expect(poolSpy).toHaveBeenCalledWith({
+      host: configCopy.databaseProxyEndpoint,
+      port: databaseConfig.port,
+      password: databaseConfig.password,
+      database: databaseConfig.dbname,
+      user: databaseConfig.username,
+      ssl: { require: true },
     });
   });
 });

@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { MedplumDatabaseConfig, MedplumServerConfig } from './config';
+import { MedplumServerConfig } from './config';
 import { globalLogger } from './logger';
 import * as migrations from './migrations/schema';
 
@@ -17,7 +17,7 @@ export const locks = {
 };
 
 export async function initDatabase(serverConfig: MedplumServerConfig, runMigrations = true): Promise<void> {
-  const config = serverConfig.database as MedplumDatabaseConfig;
+  const config = serverConfig.database;
 
   const poolConfig = {
     host: config.host,
@@ -33,9 +33,6 @@ export async function initDatabase(serverConfig: MedplumServerConfig, runMigrati
     poolConfig.ssl = poolConfig.ssl ?? {};
     poolConfig.ssl.require = true;
   }
-
-  console.log('CODY initDatabase host', poolConfig.host);
-  console.log('CODY initDatabase ssl.require', poolConfig.ssl?.require);
 
   pool = new Pool(poolConfig);
 

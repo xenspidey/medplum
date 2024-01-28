@@ -31,6 +31,7 @@ export class BackEnd extends Construct {
   botLambdaRole: iam.IRole;
   rdsSecretsArn?: string;
   rdsCluster?: rds.DatabaseCluster;
+  rdsProxy?: rds.DatabaseProxy;
   redisSubnetGroup: elasticache.CfnSubnetGroup;
   redisSecurityGroup: ec2.SecurityGroup;
   redisPassword: secretsmanager.ISecret;
@@ -52,6 +53,7 @@ export class BackEnd extends Construct {
   dnsRecord?: route53.ARecord;
   regionParameter: ssm.StringParameter;
   databaseSecretsParameter: ssm.StringParameter;
+  databaseProxyEndpointParameter: ssm.StringParameter;
   redisSecretsParameter: ssm.StringParameter;
   botLambdaRoleParameter: ssm.StringParameter;
 
@@ -144,6 +146,12 @@ export class BackEnd extends Construct {
       });
 
       this.rdsSecretsArn = (this.rdsCluster.secret as secretsmanager.ISecret).secretArn;
+
+      this.rdsProxy = new rds.DatabaseProxy(this, 'DatabaseProxy', {
+        proxyTarget: rds.ProxyTarget.fromCluster(this.rdsCluster),
+        secrets: [this.rdsCluster.secret as secretsmanager.ISecret],
+        vpc: this.vpc,
+      });
     }
 
     // Redis
@@ -374,6 +382,9 @@ export class BackEnd extends Construct {
     if (this.rdsCluster) {
       this.fargateService.node.addDependency(this.rdsCluster);
     }
+    if (this.rdsProxy) {
+      this.fargateService.node.addDependency(this.rdsProxy);
+    }
     this.fargateService.node.addDependency(this.redisCluster);
 
     // Load Balancer Target Group
@@ -473,6 +484,13 @@ export class BackEnd extends Construct {
       parameterName: `/medplum/${name}/DatabaseSecrets`,
       description: 'Database secrets ARN',
       stringValue: this.rdsSecretsArn,
+    });
+
+    this.databaseProxyEndpointParameter = new ssm.StringParameter(this, 'DatabaseProxyEndpointParameter', {
+      tier: ssm.ParameterTier.STANDARD,
+      parameterName: `/medplum/${name}/databaseProxyEndpoint`,
+      description: 'Database proxy endpoint',
+      stringValue: this.rdsProxy?.endpoint as string,
     });
 
     this.redisSecretsParameter = new ssm.StringParameter(this, 'RedisSecretsParameter', {

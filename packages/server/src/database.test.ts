@@ -1,8 +1,9 @@
+import { deepClone } from '@medplum/core';
 import { EventEmitter } from 'node:events';
 import { Duplex } from 'node:stream';
 import pg, { Pool, PoolClient, PoolConfig, QueryArrayResult } from 'pg';
 import { Readable, Writable } from 'stream';
-import { MedplumDatabaseSslConfig, loadConfig } from './config';
+import { MedplumDatabaseConfig, MedplumDatabaseSslConfig, loadConfig } from './config';
 import { closeDatabase, initDatabase } from './database';
 
 jest.mock('pg');
@@ -73,15 +74,14 @@ describe('Database config', () => {
     expect(config.baseUrl).toBeDefined();
     expect(config.database).toBeDefined();
 
-    const databaseConfig = config.database;
-    const configCopy = JSON.parse(JSON.stringify(databaseConfig));
-
+    const configCopy = deepClone(config);
+    const databaseConfig = configCopy.database as MedplumDatabaseConfig;
     const sslConfig = {
       rejectUnauthorized: true,
       require: true,
       ca: '__THIS_SHOULD_BE_A_PEM_FILE__',
     } satisfies MedplumDatabaseSslConfig;
-    configCopy.ssl = sslConfig;
+    databaseConfig.ssl = sslConfig;
 
     await initDatabase(configCopy, false);
     expect(poolSpy).toHaveBeenCalledTimes(1);

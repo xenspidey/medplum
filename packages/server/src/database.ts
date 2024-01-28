@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { MedplumDatabaseConfig } from './config';
+import { MedplumDatabaseConfig, MedplumServerConfig } from './config';
 import { globalLogger } from './logger';
 import * as migrations from './migrations/schema';
 
@@ -16,9 +16,10 @@ export const locks = {
   migration: 1,
 };
 
-export async function initDatabase(config: MedplumDatabaseConfig, runMigrations = true): Promise<void> {
+export async function initDatabase(serverConfig: MedplumServerConfig, runMigrations = true): Promise<void> {
+  const config = serverConfig.database as MedplumDatabaseConfig;
   pool = new Pool({
-    host: config.host,
+    host: serverConfig.databaseProxyEndpoint ?? config.host,
     port: config.port,
     database: config.dbname,
     user: config.username,
